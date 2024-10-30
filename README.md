@@ -90,4 +90,3 @@ docker-compose exec server python manage.py migrate
 После запуска веб-приложения документация будет доступна по следующим URL:
 
 Swagger: http://localhost:8000/api/docs/
-# abol2
