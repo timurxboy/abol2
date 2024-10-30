@@ -147,13 +147,19 @@ class ImageViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             try:
                 image_obj.variants.all().delete()
-                image_obj.delete()
+                keys_to_delete = [
+                    f"{image_obj.id}_original",
+                    f"{image_obj.id}_100x100",
+                    f"{image_obj.id}_500x500",
+                    f"{image_obj.id}_1000x1000"
+                ]
 
-                cache.delete(f"{image_obj.id}_original")  # Оригинальное изображение
-                for resolution in ['100x100', '500x500', '1000x1000']:
-                    cache.delete(f"{image_obj.id}_{resolution}")  # Варианты изображений
+                for key in keys_to_delete:
+                    cache.delete(key)  # Удаляем вариантов изображений из redis
 
                 cache.delete("images_list")  # Удаляем общий кэш для списка изображений
+
+                image_obj.delete()
 
                 # Отправка сообщения о создании в Брокер (RabbitMQ)
                 send_message('delete', {
@@ -175,19 +181,15 @@ class ImageMediaView(APIView):
 
         file_path = filter_serializer.validated_data.get('file_path')
         try:
-            # Получаем изображение из кэша
             image_data = cache.get(file_path)
             if image_data is None:
                 return Response(data={'message': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            # Определяем тип содержимого изображения
             image = PILImage.open(io.BytesIO(image_data))
-            image_format = image.format.lower()  # Получаем формат изображения в нижнем регистре
+            image_format = image.format.lower()
 
-            # Устанавливаем соответствующий content_type
             content_type = f'image/{image_format}' if image_format in ['jpeg', 'png', 'gif', 'bmp', 'tiff'] else 'application/octet-stream'
 
-            # Создаем HTTP-ответ с изображением
             response = HttpResponse(image_data, content_type=content_type)
             response['Content-Disposition'] = f'inline; filename="{file_path.split("/")[-1]}"'
             return response
